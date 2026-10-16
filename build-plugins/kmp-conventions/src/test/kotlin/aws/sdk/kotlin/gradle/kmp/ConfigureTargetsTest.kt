@@ -57,12 +57,23 @@ class ConfigureTargetsTest {
 
     @Test
     fun `wasmJs opt-in is not inherited by child projects`() {
-        val parent = project(projectDir("parent", gradleProperties = "aws.kotlin.wasmJs=true\n"))
+        // ProjectBuilder does not load gradle.properties into project properties, so model inheritance with an extra
+        // property on the parent, which child projects do see.
+        val parent = project(projectDir("parent", "common", gradleProperties = "aws.kotlin.wasmJs=true\n"))
+        parent.extensions.extraProperties.set("aws.kotlin.wasmJs", "true")
         val child = project(projectDir("parent/child", "common"), parent)
         val container = project(projectDir("parent/container"), parent)
 
         assertTrue(parent.hasWasmJs)
+        assertTrue(child.findProperty("aws.kotlin.wasmJs") == "true")
         assertFalse(child.hasWasmJs)
+        assertFalse(container.hasWasmJs)
+        assertFalse(container.needsKmpConfigured)
+    }
+
+    @Test
+    fun `wasmJs opt-in property without common sources does not configure KMP`() {
+        val container = project(projectDir("container", gradleProperties = "aws.kotlin.wasmJs=true\n"))
         assertFalse(container.hasWasmJs)
         assertFalse(container.needsKmpConfigured)
     }

@@ -250,6 +250,7 @@ class PublishTest {
 
         val publishing = project.extensions.getByType(PublishingExtension::class.java)
         val publication = publishing.publications.create("wasmJs", MavenPublication::class.java)
+        // Runs before the plugin's own withXml hook, which configurePublishing registers in afterEvaluate
         publication.pom.withXml {
             asNode().appendNode("dependencies").appendNode("dependency").apply {
                 appendNode("groupId", "aws.smithy.kotlin")

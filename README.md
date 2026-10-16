@@ -53,6 +53,9 @@ To use a local version of the plugin in downstream projects (such as `smithy-kot
 
 * `:build-plugins:build-support`   - common build support (publishing, linting, utils, etc)
 * `:build-plugins:kmp-conventions` - Plugin that applies common conventions for KMP projects (source sets, targets, etc)
+  * Kotlin/Wasm (`wasmJs`) is opt-in per module: add a `wasmJs/` source directory, or set `aws.kotlin.wasmJs=true` in
+    the module's own `gradle.properties` (inherited, `-P` and `local.properties` values are ignored). A `nonJvm/`
+    source directory adds a source set shared by the native and `wasmJs` targets.
 * `:build-plugins:smithy-build`    - Opinionated plugin that wraps the `smithy-base` plugin with a DSL for generating projections dynamically
 * `:ktlint-rules`                  - Custom ktlint rules (consumed by `build-support` at runtime)
 
