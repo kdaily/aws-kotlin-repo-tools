@@ -10,6 +10,7 @@ import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.kotlin.dsl.named
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.konan.target.HostManager
 import java.io.File
@@ -37,6 +38,11 @@ val Project.hasNative: Boolean get() = hasCommon || hasJvmAndNative || files.any
 val Project.hasJs: Boolean get() = hasCommon || files.any { it.name == "js" }
 val Project.hasJvmAndNative: Boolean get() = hasCommon || files.any { it.name == "jvmAndNative" }
 
+// Kotlin/Wasm is opt-in per project: a `wasmJs` source directory or the `aws.kotlin.wasmJs=true` project property
+// (e.g. in the project's own gradle.properties). Not every module can target Wasm (e.g. CRT-backed modules).
+val Project.hasWasmJs: Boolean get() = files.any { it.name == "wasmJs" } || WASM_JS_OPT_IN
+val Project.hasNonJvm: Boolean get() = files.any { it.name == "nonJvm" }
+
 // less frequent, more explicit targets
 val Project.hasDesktop: Boolean get() = hasNative || files.any { it.name == "desktop" }
 val Project.hasLinux: Boolean get() = hasNative || hasJvmAndNative || files.any { it.name == "linux" }
@@ -48,7 +54,7 @@ val Project.hasPosix: Boolean get() = hasNative || hasJvmAndNative || files.any 
  * Test if a project follows the convention and needs configured for KMP (used in handful of spots where we have a
  * subproject that is just a container for other projects but isn't a KMP project itself).
  */
-val Project.needsKmpConfigured: Boolean get() = hasCommon || hasJvm || hasNative || hasJs || hasJvmAndNative || hasDesktop || hasLinux || hasApple || hasWindows || hasPosix
+val Project.needsKmpConfigured: Boolean get() = hasCommon || hasJvm || hasNative || hasJs || hasWasmJs || hasNonJvm || hasJvmAndNative || hasDesktop || hasLinux || hasApple || hasWindows || hasPosix
 
 @OptIn(ExperimentalKotlinGradlePluginApi::class)
 fun Project.configureKmpTargets() {
@@ -76,6 +82,15 @@ fun Project.configureKmpTargets() {
                     group("jvmAndNative") {
                         withJvm()
                         withNative()
+                    }
+                }
+            }
+
+            if (hasNonJvm) {
+                common {
+                    group("nonJvm") {
+                        withNative()
+                        withWasmJs()
                     }
                 }
             }
@@ -123,6 +138,10 @@ fun Project.configureKmpTargets() {
         }
 
         // FIXME Configure JS
+
+        if (hasWasmJs) {
+            configureWasmJs()
+        }
 
         if (NATIVE_ENABLED) {
             if ((hasApple || hasDesktop) && (HostManager.hostIsMac || NATIVE_ENABLE_ALL_TARGETS)) {
@@ -212,6 +231,16 @@ fun Project.configureMacos() {
     }
 }
 
+@OptIn(ExperimentalWasmDsl::class)
+fun Project.configureWasmJs() {
+    kotlin {
+        wasmJs {
+            nodejs()
+            browser()
+        }
+    }
+}
+
 fun Project.configureWindows() {
     kotlin {
         mingwX64()
@@ -233,4 +262,5 @@ fun KotlinMultiplatformExtension.configureSourceSetsConvention() {
 
 val Project.JVM_ENABLED get() = prop("aws.kotlin.jvm")?.let { it == "true" } ?: true
 val Project.NATIVE_ENABLED get() = prop("aws.kotlin.native")?.let { it == "true" } ?: true
+val Project.WASM_JS_OPT_IN get() = prop("aws.kotlin.wasmJs")?.let { it == "true" } ?: false
 val Project.NATIVE_ENABLE_ALL_TARGETS get() = prop("aws.kotlin.native.enableAllTargets")?.let { it == "true" } ?: false

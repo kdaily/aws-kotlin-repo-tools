@@ -50,7 +50,14 @@ internal val ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES = setOf(
     "mingwX64",
 )
 
-// Group names which are allowed to publish K/N artifacts
+internal val ALLOWED_KOTLIN_WASM_PUBLICATION_NAMES = setOf(
+    "wasmJs",
+)
+
+// Artifact ID suffixes of klib-packaged platform artifacts. Wasm artifact IDs use "-wasm-js", not the publication name.
+private val KLIB_ARTIFACT_ID_SUFFIXES = ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES.map { "-$it" } + "-wasm-js"
+
+// Group names which are allowed to publish K/N and Kotlin/Wasm artifacts
 private val ALLOWED_KOTLIN_NATIVE_GROUP_NAMES = setOf(
     "aws.sdk.kotlin.crt",
     "aws.smithy.kotlin",
@@ -129,31 +136,10 @@ fun Project.configurePublishing(repoName: String, githubOrganization: String = "
 
                     artifact(javadocJar)
 
-                    // Add <type>klib</type> for Native platform dependencies
-                    if (publication.name in ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES) {
+                    // Add <type>klib</type> for Native and Wasm platform dependencies
+                    if (publication.name in ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES || publication.name in ALLOWED_KOTLIN_WASM_PUBLICATION_NAMES) {
                         withXml {
-                            val depsNode = asNode().get("dependencies") as? groovy.util.NodeList
-                            if (depsNode == null || depsNode.isEmpty()) {
-                                project.logger.info("No dependencies node found for native publication ${publication.name}")
-                                return@withXml
-                            }
-
-                            val deps = (depsNode.first() as groovy.util.Node).children()
-
-                            deps.forEach { dep ->
-                                val node = dep as groovy.util.Node
-                                val artifactId = (node.get("artifactId") as? groovy.util.NodeList)
-                                    ?.firstOrNull()
-                                    ?.let { (it as groovy.util.Node).text() }
-
-                                if (artifactId != null && ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES.any { artifactId.endsWith("-$it", ignoreCase = true) }) {
-                                    val existingType = node.get("type") as? groovy.util.NodeList
-                                    if (existingType == null || existingType.isEmpty()) {
-                                        project.logger.info("Adding <type>klib</type> to dependency on $artifactId")
-                                        node.appendNode("type", "klib")
-                                    }
-                                }
-                            }
+                            addKlibTypeToDependencies(project, publication.name, asNode())
                         }
                     }
                 }
@@ -191,6 +177,31 @@ fun Project.configurePublishing(repoName: String, githubOrganization: String = "
     }
 }
 
+internal fun addKlibTypeToDependencies(project: Project, publicationName: String, pom: groovy.util.Node) {
+    val depsNode = pom.get("dependencies") as? groovy.util.NodeList
+    if (depsNode == null || depsNode.isEmpty()) {
+        project.logger.info("No dependencies node found for klib publication $publicationName")
+        return
+    }
+
+    val deps = (depsNode.first() as groovy.util.Node).children()
+
+    deps.forEach { dep ->
+        val node = dep as groovy.util.Node
+        val artifactId = (node.get("artifactId") as? groovy.util.NodeList)
+            ?.firstOrNull()
+            ?.let { (it as groovy.util.Node).text() }
+
+        if (artifactId != null && KLIB_ARTIFACT_ID_SUFFIXES.any { artifactId.endsWith(it, ignoreCase = true) }) {
+            val existingType = node.get("type") as? groovy.util.NodeList
+            if (existingType == null || existingType.isEmpty()) {
+                project.logger.info("Adding <type>klib</type> to dependency on $artifactId")
+                node.appendNode("type", "klib")
+            }
+        }
+    }
+}
+
 internal fun isAvailableForPublication(project: Project, publication: MavenPublication): Boolean {
     var shouldPublish = true
 
@@ -203,8 +214,8 @@ internal fun isAvailableForPublication(project: Project, publication: MavenPubli
     // Validate publication name
     if (publication.name in ALLOWED_PUBLICATION_NAMES) {
         // Standard publication
-    } else if (publication.name in ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES) {
-        // Kotlin/Native publication
+    } else if (publication.name in ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES || publication.name in ALLOWED_KOTLIN_WASM_PUBLICATION_NAMES) {
+        // Kotlin/Native or Kotlin/Wasm publication
         if (overrideGroupNameValidation && publication.groupId !in ALLOWED_KOTLIN_NATIVE_GROUP_NAMES) {
             println("Overriding K/N publication, project=${project.name}; publication=${publication.name}; group=${publication.groupId}")
         } else {

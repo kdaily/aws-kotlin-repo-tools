@@ -10,6 +10,7 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.internal.extensions.core.extra
 import org.gradle.testfixtures.ProjectBuilder
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -164,5 +165,76 @@ class PublishTest {
                 assertFalse(isAvailableForPublication(project, nativeRuntimePublication))
             }
         }
+    }
+
+    @Test
+    fun `smithy-kotlin and aws-sdk-kotlin can publish Kotlin Wasm artifacts`() = runTest {
+        listOf("aws.smithy.kotlin", "aws.sdk.kotlin").forEach { group ->
+            val project = ProjectBuilder.builder().withName("runtime").build()
+            project.group = group
+            project.version = "1.2.3"
+
+            project.configurePublishing("smithy-kotlin", "smithy-lang")
+
+            val publishing = project.extensions.getByType(PublishingExtension::class.java)
+            publishing.publications {
+                val wasmPublication = create("wasmJs", MavenPublication::class.java).apply {
+                    groupId = group
+                    version = "1.2.3"
+                    artifactId = "runtime-wasm-js"
+                }
+                assertTrue(isAvailableForPublication(project, wasmPublication), "wasmJs publication skipped for $group")
+            }
+        }
+    }
+
+    @Test
+    fun `Kotlin Wasm artifacts outside allowed groups are not published`() = runTest {
+        val project = ProjectBuilder.builder().withName("runtime").build()
+        project.group = "foo.bar.baz"
+        project.version = "1.2.3"
+
+        project.configurePublishing("smithy-kotlin", "smithy-lang")
+
+        val publishing = project.extensions.getByType(PublishingExtension::class.java)
+        publishing.publications {
+            val wasmPublication = create("wasmJs", MavenPublication::class.java).apply {
+                groupId = "foo.bar.baz"
+                version = "1.2.3"
+                artifactId = "runtime-wasm-js"
+            }
+            assertFalse(isAvailableForPublication(project, wasmPublication))
+        }
+    }
+
+    @Test
+    fun `klib type is added to native and wasm platform dependencies only`() {
+        val project = ProjectBuilder.builder().withName("runtime").build()
+        val pom = groovy.util.Node(null, "project")
+        val deps = pom.appendNode("dependencies")
+        listOf("runtime-core-wasm-js", "runtime-core-linuxx64", "runtime-core", "runtime-core-jvm").forEach {
+            deps.appendNode("dependency").appendNode("artifactId", it)
+        }
+        val alreadyTyped = deps.appendNode("dependency")
+        alreadyTyped.appendNode("artifactId", "kotlin-stdlib-wasm-js")
+        alreadyTyped.appendNode("type", "klib")
+
+        addKlibTypeToDependencies(project, "wasmJs", pom)
+
+        val types = deps.children().associate { dep ->
+            val node = dep as groovy.util.Node
+            val artifactId = ((node.get("artifactId") as groovy.util.NodeList).first() as groovy.util.Node).text()
+            artifactId to (node.get("type") as groovy.util.NodeList).map { (it as groovy.util.Node).text() }
+        }
+        assertEquals(
+            mapOf(
+                "runtime-core-wasm-js" to listOf("klib"),
+                "runtime-core-linuxx64" to listOf("klib"),
+                "runtime-core" to emptyList(),
+                "runtime-core-jvm" to emptyList(),
+                "kotlin-stdlib-wasm-js" to listOf("klib"),
+            ),
+            types,
+        )
     }
 }
