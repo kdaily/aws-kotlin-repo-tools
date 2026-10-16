@@ -100,8 +100,9 @@ fun Project.configureKmpTargets() {
 
             if (hasNonJvm) {
                 common {
+                    // nativeMain depends on nonJvmMain, so shared native code can use nonJvm declarations
                     group("nonJvm") {
-                        withNative()
+                        group("native")
                         withWasmJs()
                     }
                 }
