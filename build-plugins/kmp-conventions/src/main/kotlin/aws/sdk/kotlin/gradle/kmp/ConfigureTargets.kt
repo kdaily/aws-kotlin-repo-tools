@@ -39,7 +39,7 @@ val Project.hasNative: Boolean get() = hasCommon || hasJvmAndNative || files.any
 val Project.hasJs: Boolean get() = hasCommon || files.any { it.name == "js" }
 val Project.hasJvmAndNative: Boolean get() = hasCommon || files.any { it.name == "jvmAndNative" }
 
-// Kotlin/Wasm is opt-in per project: a `wasmJs` source directory, or a `common` source directory together with
+// Kotlin/Wasm is opt-in per project: a `wasmJs` source directory, or a `common` (or `generated-src`) source directory with
 // `aws.kotlin.wasmJs=true` in the project's OWN gradle.properties. Not every module can target Wasm (e.g. CRT-backed
 // modules), so the setting is deliberately not read from inherited, command-line or local properties, which would
 // turn it on for every module (including container projects with no sources).
@@ -153,6 +153,11 @@ fun Project.configureKmpTargets() {
 
         if (hasWasmJs) {
             configureWasmJs()
+        } else if (ownGradleProperty(WASM_JS_OPT_IN_PROPERTY) != null) {
+            logger.warn(
+                "$path: ignoring $WASM_JS_OPT_IN_PROPERTY; it must be exactly \"true\" and the project needs a common " +
+                    "(or generated-src) source directory",
+            )
         }
 
         if (NATIVE_ENABLED) {
