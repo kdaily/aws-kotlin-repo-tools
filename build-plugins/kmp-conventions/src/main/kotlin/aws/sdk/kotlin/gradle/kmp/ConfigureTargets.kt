@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.konan.target.HostManager
 import java.io.File
+import java.util.Properties
 
 internal fun <T> Project.tryGetClass(className: String): Class<T>? {
     val classLoader = buildscript.classLoader
@@ -38,9 +39,10 @@ val Project.hasNative: Boolean get() = hasCommon || hasJvmAndNative || files.any
 val Project.hasJs: Boolean get() = hasCommon || files.any { it.name == "js" }
 val Project.hasJvmAndNative: Boolean get() = hasCommon || files.any { it.name == "jvmAndNative" }
 
-// Kotlin/Wasm is opt-in per project: a `wasmJs` source directory or the `aws.kotlin.wasmJs=true` project property
-// (e.g. in the project's own gradle.properties). Not every module can target Wasm (e.g. CRT-backed modules).
-val Project.hasWasmJs: Boolean get() = files.any { it.name == "wasmJs" } || WASM_JS_OPT_IN
+// Kotlin/Wasm is opt-in per project: a `wasmJs` source directory or `aws.kotlin.wasmJs=true` in the project's OWN
+// gradle.properties. Not every module can target Wasm (e.g. CRT-backed modules), so the setting is deliberately not
+// read from inherited, command-line or local properties, which would turn it on for every module.
+val Project.hasWasmJs: Boolean get() = files.any { it.name == "wasmJs" } || ownGradleProperty(WASM_JS_OPT_IN_PROPERTY) == "true"
 val Project.hasNonJvm: Boolean get() = files.any { it.name == "nonJvm" }
 
 // less frequent, more explicit targets
@@ -262,5 +264,11 @@ fun KotlinMultiplatformExtension.configureSourceSetsConvention() {
 
 val Project.JVM_ENABLED get() = prop("aws.kotlin.jvm")?.let { it == "true" } ?: true
 val Project.NATIVE_ENABLED get() = prop("aws.kotlin.native")?.let { it == "true" } ?: true
-val Project.WASM_JS_OPT_IN get() = prop("aws.kotlin.wasmJs")?.let { it == "true" } ?: false
+const val WASM_JS_OPT_IN_PROPERTY = "aws.kotlin.wasmJs"
+
+private fun Project.ownGradleProperty(name: String): String? {
+    val file = File(projectDir, "gradle.properties")
+    if (!file.isFile) return null
+    return Properties().apply { file.inputStream().use(::load) }.getProperty(name)?.trim()
+}
 val Project.NATIVE_ENABLE_ALL_TARGETS get() = prop("aws.kotlin.native.enableAllTargets")?.let { it == "true" } ?: false

@@ -4,51 +4,81 @@
  */
 package aws.sdk.kotlin.gradle.kmp
 
+import org.gradle.api.Project
 import org.gradle.testfixtures.ProjectBuilder
 import java.io.File
 import java.nio.file.Files
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ConfigureTargetsTest {
-    private fun projectWithDirs(vararg dirs: String) = Files.createTempDirectory("kmp-conventions-test").toFile().let { root ->
-        dirs.forEach { File(root, it).mkdirs() }
-        ProjectBuilder.builder().withProjectDir(root).build()
+    private val root: File = Files.createTempDirectory("kmp-conventions-test").toFile()
+
+    @AfterTest
+    fun cleanup() {
+        root.deleteRecursively()
     }
+
+    private fun projectDir(path: String, vararg dirs: String, gradleProperties: String? = null): File =
+        File(root, path).also { dir ->
+            dirs.forEach { File(dir, it).mkdirs() }
+            dir.mkdirs()
+            gradleProperties?.let { File(dir, "gradle.properties").writeText(it) }
+        }
+
+    private fun project(dir: File, parent: Project? = null): Project =
+        ProjectBuilder.builder().withProjectDir(dir).withName(dir.name).apply { parent?.let(::withParent) }.build()
 
     @Test
     fun `wasmJs is not configured for a common project by default`() {
-        val project = projectWithDirs("common")
+        val project = project(projectDir("a", "common"))
         assertTrue(project.hasJvm)
         assertFalse(project.hasWasmJs)
     }
 
     @Test
     fun `wasmJs is configured when the project has a wasmJs source directory`() {
-        val project = projectWithDirs("common", "wasmJs")
-        assertTrue(project.hasWasmJs)
+        assertTrue(project(projectDir("a", "common", "wasmJs")).hasWasmJs)
     }
 
     @Test
-    fun `wasmJs is configured when the project opts in by property`() {
-        val project = projectWithDirs("common")
-        project.extensions.extraProperties.set("aws.kotlin.wasmJs", "true")
+    fun `wasmJs is configured when the project opts in in its own gradle properties`() {
+        val project = project(projectDir("a", "common", gradleProperties = "aws.kotlin.wasmJs=true\n"))
         assertTrue(project.hasWasmJs)
     }
 
     @Test
     fun `wasmJs opt-in property must be true`() {
-        val project = projectWithDirs("common")
-        project.extensions.extraProperties.set("aws.kotlin.wasmJs", "yes")
+        val project = project(projectDir("a", "common", gradleProperties = "aws.kotlin.wasmJs=yes\n"))
+        assertFalse(project.hasWasmJs)
+    }
+
+    @Test
+    fun `wasmJs opt-in is not inherited by child projects`() {
+        val parent = project(projectDir("parent", gradleProperties = "aws.kotlin.wasmJs=true\n"))
+        val child = project(projectDir("parent/child", "common"), parent)
+        val container = project(projectDir("parent/container"), parent)
+
+        assertTrue(parent.hasWasmJs)
+        assertFalse(child.hasWasmJs)
+        assertFalse(container.hasWasmJs)
+        assertFalse(container.needsKmpConfigured)
+    }
+
+    @Test
+    fun `wasmJs opt-in is not read from project or extra properties`() {
+        val project = project(projectDir("a", "common"))
+        project.extensions.extraProperties.set("aws.kotlin.wasmJs", "true")
         assertFalse(project.hasWasmJs)
     }
 
     @Test
     fun `nonJvm source directory marks the project for KMP configuration`() {
-        val project = projectWithDirs("nonJvm")
+        val project = project(projectDir("a", "nonJvm"))
         assertTrue(project.hasNonJvm)
         assertTrue(project.needsKmpConfigured)
-        assertFalse(projectWithDirs("common").hasNonJvm)
+        assertFalse(project(projectDir("b", "common")).hasNonJvm)
     }
 }

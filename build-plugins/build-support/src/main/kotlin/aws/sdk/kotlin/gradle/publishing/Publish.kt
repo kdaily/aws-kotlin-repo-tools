@@ -58,14 +58,14 @@ internal val ALLOWED_KOTLIN_WASM_PUBLICATION_NAMES = setOf(
 private val KLIB_ARTIFACT_ID_SUFFIXES = ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES.map { "-$it" } + "-wasm-js"
 
 // Group names which are allowed to publish K/N and Kotlin/Wasm artifacts
-private val ALLOWED_KOTLIN_NATIVE_GROUP_NAMES = setOf(
+private val ALLOWED_KLIB_GROUP_NAMES = setOf(
     "aws.sdk.kotlin.crt",
     "aws.smithy.kotlin",
     "com.sonatype.central.testing.amazon",
     "aws.sdk.kotlin",
 )
 
-// Optional override to the above set.
+// Optional override to the above set. Applies to both K/N and Kotlin/Wasm publications.
 // Used to support local development where you want to run publishToMavenLocal in smithy-kotlin, aws-sdk-kotlin.
 internal const val OVERRIDE_KOTLIN_NATIVE_GROUP_NAME_VALIDATION = "aws.kotlin.native.allowPublication"
 
@@ -216,10 +216,10 @@ internal fun isAvailableForPublication(project: Project, publication: MavenPubli
         // Standard publication
     } else if (publication.name in ALLOWED_KOTLIN_NATIVE_PUBLICATION_NAMES || publication.name in ALLOWED_KOTLIN_WASM_PUBLICATION_NAMES) {
         // Kotlin/Native or Kotlin/Wasm publication
-        if (overrideGroupNameValidation && publication.groupId !in ALLOWED_KOTLIN_NATIVE_GROUP_NAMES) {
-            println("Overriding K/N publication, project=${project.name}; publication=${publication.name}; group=${publication.groupId}")
+        if (overrideGroupNameValidation && publication.groupId !in ALLOWED_KLIB_GROUP_NAMES) {
+            println("Overriding K/N or Kotlin/Wasm publication, project=${project.name}; publication=${publication.name}; group=${publication.groupId}")
         } else {
-            shouldPublish = shouldPublish && publication.groupId in ALLOWED_KOTLIN_NATIVE_GROUP_NAMES
+            shouldPublish = shouldPublish && publication.groupId in ALLOWED_KLIB_GROUP_NAMES
         }
     } else {
         shouldPublish = false

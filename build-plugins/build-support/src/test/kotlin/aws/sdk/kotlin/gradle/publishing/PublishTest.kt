@@ -5,8 +5,10 @@
 package aws.sdk.kotlin.gradle.publishing
 
 import kotlinx.coroutines.test.runTest
+import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.GenerateMavenPom
 import org.gradle.internal.extensions.core.extra
 import org.gradle.testfixtures.ProjectBuilder
 import kotlin.test.Test
@@ -236,5 +238,31 @@ class PublishTest {
             ),
             types,
         )
+    }
+
+    @Test
+    fun `wasmJs POM gets klib type on wasm dependencies`() {
+        val project = ProjectBuilder.builder().withName("runtime").build()
+        project.group = "aws.smithy.kotlin"
+        project.version = "1.2.3"
+
+        project.configurePublishing("smithy-kotlin", "smithy-lang")
+
+        val publishing = project.extensions.getByType(PublishingExtension::class.java)
+        val publication = publishing.publications.create("wasmJs", MavenPublication::class.java)
+        publication.pom.withXml {
+            asNode().appendNode("dependencies").appendNode("dependency").apply {
+                appendNode("groupId", "aws.smithy.kotlin")
+                appendNode("artifactId", "runtime-core-wasm-js")
+                appendNode("version", "1.2.3")
+            }
+        }
+        (project as ProjectInternal).evaluate()
+
+        val pomTask = project.tasks.getByName("generatePomFileForWasmJsPublication") as GenerateMavenPom
+        pomTask.doGenerate()
+
+        val pom = pomTask.destination.readText()
+        assertTrue(Regex("<artifactId>runtime-core-wasm-js</artifactId>\\s*<version>1.2.3</version>\\s*<type>klib</type>").containsMatchIn(pom), pom)
     }
 }
