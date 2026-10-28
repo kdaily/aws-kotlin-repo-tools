@@ -10,7 +10,9 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ConfigureTargetsTest {
@@ -91,5 +93,23 @@ class ConfigureTargetsTest {
         assertTrue(project.hasNonJvm)
         assertTrue(project.needsKmpConfigured)
         assertFalse(project(projectDir("b", "common")).hasNonJvm)
+    }
+
+    @Test
+    fun `Chrome runs without its sandbox only for root`() {
+        assertTrue(chromeNeedsNoSandbox(0))
+        assertFalse(chromeNeedsNoSandbox(1000))
+        assertFalse(chromeNeedsNoSandbox(null))
+    }
+
+    @Test
+    fun `process uid is read on Linux`() {
+        if (!System.getProperty("os.name").startsWith("Linux")) {
+            assertNull(processUid())
+            return
+        }
+        // a file this process creates is owned by its (effective) uid
+        val created = File(root, "owned-by-this-process").apply { writeText("") }
+        assertEquals(Files.getAttribute(created.toPath(), "unix:uid"), processUid())
     }
 }

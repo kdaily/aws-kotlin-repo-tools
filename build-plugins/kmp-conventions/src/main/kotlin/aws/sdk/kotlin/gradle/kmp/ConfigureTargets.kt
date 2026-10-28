@@ -6,6 +6,8 @@ package aws.sdk.kotlin.gradle.kmp
 
 import aws.sdk.kotlin.gradle.util.prop
 import org.gradle.api.Project
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.kotlin.dsl.named
@@ -14,6 +16,8 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.konan.target.HostManager
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.Properties
 
 internal fun <T> Project.tryGetClass(className: String): Class<T>? {
@@ -261,10 +265,31 @@ fun Project.configureWasmJs() {
                     // A module's karma.config.d can still set config.listenAddress and config.hostname.
                     environment("LISTEN_ADDR", "127.0.0.1")
                     environment("IP", "127.0.0.1")
+                    if (providers.of(ChromeNeedsNoSandbox::class.java) {}.get()) {
+                        useKarma { useChromeHeadlessNoSandbox() }
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * Whether the browser tests must run Chrome without its sandbox: Chrome refuses to start as root (as CI containers
+ * such as CodeBuild run builds) unless the sandbox is off. Other users keep the sandbox. A value source, so that the
+ * configuration cache treats the user the build runs as as an input.
+ */
+internal abstract class ChromeNeedsNoSandbox : ValueSource<Boolean, ValueSourceParameters.None> {
+    override fun obtain(): Boolean = chromeNeedsNoSandbox(processUid())
+}
+
+internal fun chromeNeedsNoSandbox(uid: Int?): Boolean = uid == 0
+
+// The uid of this process where the platform reports one (Linux /proc); null elsewhere
+internal fun processUid(): Int? = try {
+    Files.getAttribute(Paths.get("/proc/self"), "unix:uid") as? Int
+} catch (_: Exception) {
+    null
 }
 
 fun Project.configureWindows() {
