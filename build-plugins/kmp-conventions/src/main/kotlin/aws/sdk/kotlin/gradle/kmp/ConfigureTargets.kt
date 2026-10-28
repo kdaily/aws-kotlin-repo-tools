@@ -254,7 +254,15 @@ fun Project.configureWasmJs() {
     kotlin {
         wasmJs {
             nodejs()
-            browser()
+            browser {
+                testTask {
+                    // Karma listens on all interfaces by default, and serves the tests and whatever a module adds
+                    // through karma.config.d (such as proxies to local test servers): keep it on the loopback interface.
+                    // A module's karma.config.d can still set config.listenAddress and config.hostname.
+                    environment("LISTEN_ADDR", "127.0.0.1")
+                    environment("IP", "127.0.0.1")
+                }
+            }
         }
     }
 }
